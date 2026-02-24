@@ -73,9 +73,9 @@ const CATEGORY_ICONS = {
 }
 
 function App() {
-  const [factChecks, setFactChecks] = useState<FactCheck[]>(SAMPLE_FACT_CHECKS)
+  const [factChecks] = useState<FactCheck[]>(SAMPLE_FACT_CHECKS)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [isLive, setIsLive] = useState(true)
+  const [isLive] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
