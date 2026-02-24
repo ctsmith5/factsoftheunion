@@ -125,6 +125,7 @@ export default function AdminPanel() {
     ws.onopen = () => {
       ws.send(JSON.stringify({
         type: 'claim',
+        token,
         ...form
       }))
       ws.close()
