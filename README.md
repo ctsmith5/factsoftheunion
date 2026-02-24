@@ -1,73 +1,62 @@
-# React + TypeScript + Vite
+# Facts of the Union - Real-Time SOTU Fact Checker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Architecture
 
-Currently, two official plugins are available:
+### Backend (FastAPI + LangGraph)
+- **File**: `backend/main.py`
+- **WebSocket**: `/ws` - Real-time claim streaming
+- **REST API**: `/api/claims`, `/api/stats`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Frontend (React + Vite)
+- Real-time WebSocket connection to backend
+- Animated claim feed with framer-motion
+- Scoreboard with live stats
 
-## React Compiler
+### The Yellow Zone System
+Claims are classified into:
+- **GREEN** (✅ True): Verifiably accurate
+- **YELLOW** (⚠️ Clarified): Stylistic exaggeration of real facts
+- **RED** (❌ False): Factually incorrect
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Quick Start
 
-## Expanding the ESLint configuration
+```bash
+# Install frontend dependencies
+npm install
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Run frontend dev server
+npm run dev
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# In another terminal, run backend
+cd backend
+pip install -r requirements.txt
+python main.py
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Deployment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Railway.app (Recommended)
+1. Push to GitHub
+2. Connect Railway to repo
+3. Set environment variables:
+   - `PERPLEXITY_API_KEY`
+   - `GEMINI_API_KEY`
+   - `DEEPGRAM_API_KEY`
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Environment Variables
+```bash
+VITE_WS_URL=ws://localhost:8000/ws
+VITE_API_URL=http://localhost:8000
+```
+
+## The Yellow Zone Prompt
+
+```
+You are the 'Linguistic Bridge' for the State of the Union. Your goal is not to 'catch' the President, but to 'translate' his agenda into factual context.
+
+If a claim is hyperbolic (e.g., 'The best ever'), find the closest supporting metric and label it YELLOW (Clarification Needed).
+
+Provide a 'Neutral Rephrase' that a person from any political party would accept as a factual description of the underlying event.
+
+Avoid 'Gotcha' fact-checking. Prioritize explaining what he is talking about over calling him a liar.
 ```
