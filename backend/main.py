@@ -1,10 +1,13 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import asyncio
 import json
 from typing import Dict, List, Optional
 from datetime import datetime
 import os
+import pathlib
 
 app = FastAPI(title="Facts of the Union - Intelligence Engine")
 
@@ -171,6 +174,22 @@ async def test_claim(statement: str, speaker: str = "President"):
     await broadcast({"type": "new_claim", "claim": claim})
     asyncio.create_task(analyze_claim(claim["id"]))
     return claim
+
+# Serve static frontend files
+static_dir = pathlib.Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(static_dir / "index.html")
+    
+    @app.get("/{path:path}")
+    async def serve_spa(path: str):
+        file_path = static_dir / path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(static_dir / "index.html")
 
 if __name__ == "__main__":
     import uvicorn
