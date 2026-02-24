@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
 interface Claim {
@@ -13,18 +13,78 @@ interface Claim {
   stage?: string
 }
 
+interface User {
+  username: string
+  authenticated: boolean
+}
+
 const CATEGORIES = ['economy', 'healthcare', 'immigration', 'foreign-policy', 'climate', 'other']
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function AdminPanel() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [claims, setClaims] = useState<Claim[]>([])
   const [isConnected, setIsConnected] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     statement: '',
     speaker: 'President',
     category: 'economy'
   })
 
+  const token = searchParams.get('token')
+  const urlError = searchParams.get('error')
+  const urlUser = searchParams.get('user')
+
+  // Handle OAuth callback
   useEffect(() => {
+    if (urlError === 'unauthorized' && urlUser) {
+      setError(`User "${urlUser}" is not authorized to access the admin panel.`)
+      // Clear URL params
+      setSearchParams({}, { replace: true })
+    }
+    
+    if (token) {
+      // Store token and clear URL
+      localStorage.setItem('admin_token', token)
+      setSearchParams({}, { replace: true })
+    }
+  }, [token, urlError, urlUser, setSearchParams])
+
+  // Verify token on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('admin_token')
+    if (!storedToken) {
+      setIsLoading(false)
+      return
+    }
+
+    // Verify token with backend
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${storedToken}`
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Invalid token')
+      return res.json()
+    })
+    .then(data => {
+      setUser(data)
+      setIsLoading(false)
+    })
+    .catch(() => {
+      localStorage.removeItem('admin_token')
+      setIsLoading(false)
+    })
+  }, [token]) // Re-run if token was just set
+
+  // WebSocket connection
+  useEffect(() => {
+    if (!user) return
+
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
     const ws = new WebSocket(wsUrl)
     
@@ -34,7 +94,7 @@ export default function AdminPanel() {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.type === 'init') {
-        setClaims(data.claims)
+        setClaims(data.data)
       } else if (data.type === 'new_claim') {
         setClaims(prev => [data.claim, ...prev])
       } else if (data.type === 'claim_complete') {
@@ -43,10 +103,21 @@ export default function AdminPanel() {
     }
     
     return () => ws.close()
-  }, [])
+  }, [user])
+
+  const handleLogin = () => {
+    window.location.href = `${API_URL}/api/auth/github`
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token')
+    setUser(null)
+    setClaims([])
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const token = localStorage.getItem('admin_token')
     
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
     const ws = new WebSocket(wsUrl)
@@ -61,15 +132,64 @@ export default function AdminPanel() {
     }
   }
 
-  const updateStatus = (claimId: string, status: string) => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    fetch(`${apiUrl}/api/claims`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: claimId, status })
-    })
+  // Login Screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-slate-600">Verifying access...</p>
+        </div>
+      </div>
+    )
   }
 
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full"
+        >
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">🔒 Admin Access</h1>
+            <p className="text-slate-600">Facts of the Union Administration Panel</p>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <button
+              onClick={handleLogin}
+              className="w-full flex items-center justify-center gap-3 bg-slate-900 text-white py-3 px-6 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+              </svg>
+              Continue with GitHub
+            </button>
+
+            <div className="text-center">
+              <Link to="/" className="text-sm text-slate-500 hover:text-slate-700">
+                ← Back to main site
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-slate-200 text-xs text-slate-400 text-center">
+            Only authorized GitHub users can access this panel.
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
+  // Admin Dashboard
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -82,9 +202,20 @@ export default function AdminPanel() {
               </Link>
               <h1 className="text-2xl font-bold">Admin Panel</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+              <div className="flex items-center gap-2 pl-4 border-l border-slate-700">
+                <span className="text-sm text-slate-300">@{user.username}</span>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -193,19 +324,6 @@ export default function AdminPanel() {
                   }`}>
                     {claim.status}
                   </span>
-                </div>
-
-                {/* Quick Status Override */}
-                <div className="flex gap-1 mt-3">
-                  {['true', 'yellow', 'false', 'analyzing'].map(status => (
-                    <button
-                      key={status}
-                      onClick={() => updateStatus(claim.id, status)}
-                      className="text-xs px-2 py-1 bg-white border border-slate-300 hover:bg-slate-50 rounded"
-                    >
-                      {status}
-                    </button>
-                  ))}
                 </div>
               </motion.div>
             ))}
