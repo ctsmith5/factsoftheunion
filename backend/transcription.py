@@ -1,7 +1,9 @@
 import asyncio
+import json
 import os
 import re
 import subprocess
+import time
 from datetime import datetime
 from typing import Callable, Awaitable, Optional
 
@@ -45,17 +47,32 @@ class TranscriptionManager:
         self._sentence_buffer: list[str] = []
         self.youtube_url: Optional[str] = None
         self.started_at: Optional[str] = None
+        self.metadata: Optional[dict] = None
+        self._chunks_received: int = 0
+        self._bytes_received: int = 0
+        self._last_chunk_at: float = 0
 
     @property
     def is_running(self) -> bool:
         return self._running
 
     def status(self) -> dict:
+        has_audio = (
+            self._running
+            and self._last_chunk_at > 0
+            and (time.time() - self._last_chunk_at) < 5
+        )
         return {
             "running": self._running,
             "youtube_url": self.youtube_url,
             "started_at": self.started_at,
             "sentences_buffered": len(self._sentence_buffer),
+            "metadata": self.metadata,
+            "audio": {
+                "chunks_received": self._chunks_received,
+                "bytes_received": self._bytes_received,
+                "has_audio": has_audio,
+            },
         }
 
     async def start(self, youtube_url: str) -> None:
@@ -69,6 +86,34 @@ class TranscriptionManager:
         self.started_at = datetime.now().isoformat()
         self._running = True
         self._sentence_buffer = []
+        self.metadata = None
+        self._chunks_received = 0
+        self._bytes_received = 0
+        self._last_chunk_at = 0
+
+        # Fetch YouTube metadata before starting the pipeline
+        try:
+            meta_result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["yt-dlp", "--dump-json", "--no-download", youtube_url],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                ),
+            )
+            if meta_result.returncode == 0 and meta_result.stdout.strip():
+                raw = json.loads(meta_result.stdout)
+                self.metadata = {
+                    "title": raw.get("title"),
+                    "channel": raw.get("uploader") or raw.get("channel"),
+                    "description": (raw.get("description") or "")[:300],
+                    "is_live": raw.get("is_live", False),
+                    "thumbnail": raw.get("thumbnail"),
+                }
+        except Exception as e:
+            print(f"[Transcription] Failed to fetch metadata: {e}")
+
         self._task = asyncio.create_task(self._run(youtube_url))
 
     async def stop(self) -> None:
@@ -99,6 +144,10 @@ class TranscriptionManager:
 
         self.youtube_url = None
         self.started_at = None
+        self.metadata = None
+        self._chunks_received = 0
+        self._bytes_received = 0
+        self._last_chunk_at = 0
 
     async def _run(self, youtube_url: str) -> None:
         loop = asyncio.get_event_loop()
@@ -170,6 +219,9 @@ class TranscriptionManager:
                 )
                 if not data:
                     break
+                self._chunks_received += 1
+                self._bytes_received += len(data)
+                self._last_chunk_at = time.time()
                 await self._dg_connection.send(data)
 
         except asyncio.CancelledError:

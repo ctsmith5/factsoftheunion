@@ -37,6 +37,19 @@ export default function AdminPanel() {
     running: boolean
     youtube_url: string | null
     started_at: string | null
+    sentences_buffered?: number
+    metadata?: {
+      title?: string
+      channel?: string
+      description?: string
+      is_live?: boolean
+      thumbnail?: string
+    } | null
+    audio?: {
+      chunks_received: number
+      bytes_received: number
+      has_audio: boolean
+    }
   }>({ running: false, youtube_url: null, started_at: null })
   const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=bQC7ypkBTbg')
   const [transcriptionLoading, setTranscriptionLoading] = useState(false)
@@ -123,7 +136,7 @@ export default function AdminPanel() {
         .catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, 2000)
     return () => clearInterval(id)
   }, [user])
 
@@ -158,7 +171,7 @@ export default function AdminPanel() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      setTranscriptionStatus({ running: false, youtube_url: null, started_at: null })
+      setTranscriptionStatus({ running: false, youtube_url: null, started_at: null, metadata: null, audio: undefined, sentences_buffered: 0 })
     } catch {
       alert('Network error stopping transcription')
     } finally {
@@ -299,18 +312,79 @@ export default function AdminPanel() {
           </h2>
 
           {transcriptionStatus.running ? (
-            <div className="space-y-3">
-              <div className="text-sm text-slate-600">
-                <p>Streaming from: <span className="font-mono text-xs break-all">{transcriptionStatus.youtube_url}</span></p>
-                <p>Started: {transcriptionStatus.started_at}</p>
+            <div className="space-y-4">
+              {/* Metadata card */}
+              {transcriptionStatus.metadata && (
+                <div className="flex gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  {transcriptionStatus.metadata.thumbnail && (
+                    <img
+                      src={transcriptionStatus.metadata.thumbnail}
+                      alt=""
+                      className="w-28 h-20 object-cover rounded flex-shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-slate-900 truncate">
+                      {transcriptionStatus.metadata.title}
+                    </h3>
+                    <p className="text-sm text-slate-600">{transcriptionStatus.metadata.channel}</p>
+                    <span className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded ${
+                      transcriptionStatus.metadata.is_live
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {transcriptionStatus.metadata.is_live ? 'LIVE' : 'VOD'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Audio health + stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                    transcriptionStatus.audio?.has_audio
+                      ? 'bg-green-500 animate-pulse'
+                      : 'bg-red-500'
+                  }`} />
+                  <span className="text-sm font-medium text-slate-700">
+                    {transcriptionStatus.audio?.has_audio ? 'Audio OK' : 'No Audio'}
+                  </span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs text-slate-500">Chunks</p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {(transcriptionStatus.audio?.chunks_received ?? 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs text-slate-500">Data</p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {((transcriptionStatus.audio?.bytes_received ?? 0) / 1024 / 1024).toFixed(1)} MB
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs text-slate-500">Sentences</p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {transcriptionStatus.sentences_buffered ?? 0}
+                  </p>
+                </div>
               </div>
-              <button
-                onClick={handleStopTranscription}
-                disabled={transcriptionLoading}
-                className="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 font-bold disabled:opacity-50"
-              >
-                {transcriptionLoading ? 'Stopping...' : 'Stop Transcription'}
-              </button>
+
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-500">
+                  <span className="font-mono text-xs break-all">{transcriptionStatus.youtube_url}</span>
+                  <span className="mx-2">·</span>
+                  Started {transcriptionStatus.started_at}
+                </div>
+                <button
+                  onClick={handleStopTranscription}
+                  disabled={transcriptionLoading}
+                  className="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 font-bold disabled:opacity-50"
+                >
+                  {transcriptionLoading ? 'Stopping...' : 'Stop Transcription'}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
