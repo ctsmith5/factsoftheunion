@@ -52,7 +52,7 @@ export default function AdminPanel() {
     }
     error?: string | null
   }>({ running: false, youtube_url: null, started_at: null })
-  const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=bQC7ypkBTbg')
+  const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=pjGvA-D0Fcs')
   const [transcriptionLoading, setTranscriptionLoading] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState<string[]>([])
   const transcriptEndRef = useRef<HTMLDivElement>(null)

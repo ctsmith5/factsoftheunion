@@ -51,7 +51,7 @@ class ClaimState:
 state = ClaimState()
 
 # Default C-SPAN YouTube URL (updated for each SOTU)
-DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=bQC7ypkBTbg"
+DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=pjGvA-D0Fcs"
 
 async def _on_transcript(text: str):
     """Callback: broadcast transcript text to all clients."""
