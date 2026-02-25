@@ -13,6 +13,7 @@ import uuid
 import httpx
 import jwt
 from jwt.exceptions import InvalidTokenError
+from transcription import TranscriptionManager
 
 # Configuration
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
@@ -48,6 +49,36 @@ class ClaimState:
         self.clients: List[WebSocket] = []
 
 state = ClaimState()
+
+# Default C-SPAN YouTube URL (updated for each SOTU)
+DEFAULT_YOUTUBE_URL = "https://www.youtube.com/watch?v=bQC7ypkBTbg"
+
+async def _on_transcript(text: str):
+    """Callback: broadcast transcript text to all clients."""
+    state.current_transcript = text
+    await broadcast({"type": "transcript", "text": text})
+
+async def _on_claim(statement: str):
+    """Callback: create a claim from extracted speech and trigger analysis."""
+    claim = {
+        "id": f"claim_{uuid.uuid4().hex[:8]}",
+        "timestamp": datetime.now().isoformat(),
+        "statement": statement,
+        "speaker": "President",
+        "status": "analyzing",
+        "category": "other",
+        "explanation": None,
+        "neutral_rephrase": None,
+        "sources": [],
+    }
+    state.claims.insert(0, claim)
+    await broadcast({"type": "new_claim", "claim": claim})
+    asyncio.create_task(analyze_claim(claim["id"]))
+
+transcription_manager = TranscriptionManager(
+    on_transcript=_on_transcript,
+    on_claim=_on_claim,
+)
 
 # Auth helpers
 def create_access_token(data: dict) -> str:
@@ -295,6 +326,30 @@ async def test_claim(
     await broadcast({"type": "new_claim", "claim": claim})
     asyncio.create_task(analyze_claim(claim["id"]))
     return claim
+
+# Transcription endpoints
+@app.post("/api/transcription/start")
+async def start_transcription(
+    youtube_url: str = DEFAULT_YOUTUBE_URL,
+    token_data: dict = Depends(require_auth),
+):
+    """Start live transcription from a YouTube stream."""
+    try:
+        await transcription_manager.start(youtube_url)
+        return {"status": "started", "youtube_url": youtube_url}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/transcription/stop")
+async def stop_transcription(token_data: dict = Depends(require_auth)):
+    """Stop live transcription."""
+    await transcription_manager.stop()
+    return {"status": "stopped"}
+
+@app.get("/api/transcription/status")
+async def transcription_status():
+    """Get current transcription status."""
+    return transcription_manager.status()
 
 # Static files - serve React app
 static_dir = pathlib.Path(__file__).parent / "static"

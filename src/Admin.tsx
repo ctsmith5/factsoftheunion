@@ -33,6 +33,13 @@ export default function AdminPanel() {
     speaker: 'President',
     category: 'economy'
   })
+  const [transcriptionStatus, setTranscriptionStatus] = useState<{
+    running: boolean
+    youtube_url: string | null
+    started_at: string | null
+  }>({ running: false, youtube_url: null, started_at: null })
+  const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=bQC7ypkBTbg')
+  const [transcriptionLoading, setTranscriptionLoading] = useState(false)
 
   const token = searchParams.get('token')
   const urlError = searchParams.get('error')
@@ -105,6 +112,59 @@ export default function AdminPanel() {
     
     return () => ws.close()
   }, [user])
+
+  // Poll transcription status
+  useEffect(() => {
+    if (!user) return
+    const poll = () => {
+      fetch(`${API_URL}/api/transcription/status`)
+        .then(r => r.json())
+        .then(setTranscriptionStatus)
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => clearInterval(id)
+  }, [user])
+
+  const handleStartTranscription = async () => {
+    const token = localStorage.getItem('admin_token')
+    if (!token) return
+    setTranscriptionLoading(true)
+    try {
+      const res = await fetch(
+        `${API_URL}/api/transcription/start?youtube_url=${encodeURIComponent(youtubeUrl)}`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        alert(data?.detail || 'Failed to start')
+      } else {
+        setTranscriptionStatus(prev => ({ ...prev, running: true, youtube_url: youtubeUrl }))
+      }
+    } catch (e) {
+      alert('Network error starting transcription')
+    } finally {
+      setTranscriptionLoading(false)
+    }
+  }
+
+  const handleStopTranscription = async () => {
+    const token = localStorage.getItem('admin_token')
+    if (!token) return
+    setTranscriptionLoading(true)
+    try {
+      await fetch(`${API_URL}/api/transcription/stop`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setTranscriptionStatus({ running: false, youtube_url: null, started_at: null })
+    } catch {
+      alert('Network error stopping transcription')
+    } finally {
+      setTranscriptionLoading(false)
+    }
+  }
 
   const handleLogin = () => {
     window.location.href = `${API_URL}/api/auth/github`
@@ -224,7 +284,58 @@ export default function AdminPanel() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Live Transcription Controls */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-xl font-bold mb-4">
+            {transcriptionStatus.running ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                Live Transcription Active
+              </span>
+            ) : (
+              'Live Transcription'
+            )}
+          </h2>
+
+          {transcriptionStatus.running ? (
+            <div className="space-y-3">
+              <div className="text-sm text-slate-600">
+                <p>Streaming from: <span className="font-mono text-xs break-all">{transcriptionStatus.youtube_url}</span></p>
+                <p>Started: {transcriptionStatus.started_at}</p>
+              </div>
+              <button
+                onClick={handleStopTranscription}
+                disabled={transcriptionLoading}
+                className="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 font-bold disabled:opacity-50"
+              >
+                {transcriptionLoading ? 'Stopping...' : 'Stop Transcription'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">YouTube URL</label>
+                <input
+                  type="text"
+                  value={youtubeUrl}
+                  onChange={e => setYoutubeUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+              <button
+                onClick={handleStartTranscription}
+                disabled={transcriptionLoading || !youtubeUrl}
+                className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 font-bold disabled:opacity-50"
+              >
+                {transcriptionLoading ? 'Starting...' : 'Start Transcription'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Inject Claim Form */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-xl font-bold mb-4">🚀 Inject Claim</h2>
@@ -331,6 +442,7 @@ export default function AdminPanel() {
               </motion.div>
             ))}
           </div>
+        </div>
         </div>
       </main>
     </div>
