@@ -51,6 +51,7 @@ class TranscriptionManager:
         self._chunks_received: int = 0
         self._bytes_received: int = 0
         self._last_chunk_at: float = 0
+        self._error: Optional[str] = None
 
     @property
     def is_running(self) -> bool:
@@ -73,6 +74,7 @@ class TranscriptionManager:
                 "bytes_received": self._bytes_received,
                 "has_audio": has_audio,
             },
+            "error": self._error,
         }
 
     async def start(self, youtube_url: str) -> None:
@@ -90,6 +92,7 @@ class TranscriptionManager:
         self._chunks_received = 0
         self._bytes_received = 0
         self._last_chunk_at = 0
+        self._error = None
 
         # Fetch YouTube metadata before starting the pipeline
         try:
@@ -148,6 +151,7 @@ class TranscriptionManager:
         self._chunks_received = 0
         self._bytes_received = 0
         self._last_chunk_at = 0
+        self._error = None
 
     async def _run(self, youtube_url: str) -> None:
         loop = asyncio.get_event_loop()
@@ -198,7 +202,7 @@ class TranscriptionManager:
 
             # Spawn yt-dlp | ffmpeg subprocess for audio extraction
             cmd = (
-                f"yt-dlp -f bestaudio -o - '{youtube_url}' | "
+                f"yt-dlp -f bestaudio -o - '{youtube_url}' 2>&1 | "
                 f"ffmpeg -i pipe:0 -f s16le -ar 16000 -ac 1 pipe:1"
             )
             self._process = await loop.run_in_executor(
@@ -207,9 +211,28 @@ class TranscriptionManager:
                     cmd,
                     shell=True,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                 ),
             )
+
+            # Read stderr in background to capture errors
+            async def _read_stderr():
+                lines = []
+                while self._process and self._process.stderr:
+                    line = await loop.run_in_executor(
+                        None, self._process.stderr.readline
+                    )
+                    if not line:
+                        break
+                    decoded = line.decode("utf-8", errors="replace").strip()
+                    if decoded:
+                        lines.append(decoded)
+                        print(f"[yt-dlp/ffmpeg] {decoded}")
+                if lines and self._chunks_received == 0:
+                    # Only surface error if no audio was ever received
+                    self._error = lines[-1][:200]
+
+            stderr_task = asyncio.create_task(_read_stderr())
 
             # Stream audio chunks to Deepgram
             chunk_size = 4096
@@ -218,16 +241,21 @@ class TranscriptionManager:
                     None, self._process.stdout.read, chunk_size
                 )
                 if not data:
+                    if self._chunks_received == 0 and not self._error:
+                        self._error = "yt-dlp produced no audio data — video may be unavailable or URL invalid"
                     break
                 self._chunks_received += 1
                 self._bytes_received += len(data)
                 self._last_chunk_at = time.time()
                 await self._dg_connection.send(data)
 
+            stderr_task.cancel()
+
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"[Transcription] Error: {e}")
+            self._error = str(e)[:200]
         finally:
             self._running = False
             await self.stop()

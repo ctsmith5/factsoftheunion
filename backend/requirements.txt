@@ -5,3 +5,4 @@ python-dotenv==1.0.0
 httpx==0.26.0
 pyjwt==2.8.0
 deepgram-sdk>=3.0.0,<4.0.0
+yt-dlp

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
@@ -50,9 +50,12 @@ export default function AdminPanel() {
       bytes_received: number
       has_audio: boolean
     }
+    error?: string | null
   }>({ running: false, youtube_url: null, started_at: null })
   const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=bQC7ypkBTbg')
   const [transcriptionLoading, setTranscriptionLoading] = useState(false)
+  const [liveTranscript, setLiveTranscript] = useState<string[]>([])
+  const transcriptEndRef = useRef<HTMLDivElement>(null)
 
   const token = searchParams.get('token')
   const urlError = searchParams.get('error')
@@ -120,11 +123,21 @@ export default function AdminPanel() {
         setClaims(prev => [data.claim, ...prev])
       } else if (data.type === 'claim_complete') {
         setClaims(prev => prev.map(c => c.id === data.claim.id ? data.claim : c))
+      } else if (data.type === 'transcript') {
+        setLiveTranscript(prev => {
+          const next = [...prev, data.text]
+          return next.length > 200 ? next.slice(-200) : next
+        })
       }
     }
     
     return () => ws.close()
   }, [user])
+
+  // Auto-scroll transcript feed
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [liveTranscript])
 
   // Poll transcription status
   useEffect(() => {
@@ -172,6 +185,7 @@ export default function AdminPanel() {
         headers: { Authorization: `Bearer ${token}` },
       })
       setTranscriptionStatus({ running: false, youtube_url: null, started_at: null, metadata: null, audio: undefined, sentences_buffered: 0 })
+      setLiveTranscript([])
     } catch {
       alert('Network error stopping transcription')
     } finally {
@@ -371,6 +385,13 @@ export default function AdminPanel() {
                 </div>
               </div>
 
+              {/* Error banner */}
+              {transcriptionStatus.error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-mono">
+                  {transcriptionStatus.error}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-500">
                   <span className="font-mono text-xs break-all">{transcriptionStatus.youtube_url}</span>
@@ -408,6 +429,36 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
+
+        {/* Live Transcript Feed */}
+        {transcriptionStatus.running && (
+          <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-700 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-white inline-flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                Live Speech-to-Text
+              </h2>
+              <button
+                onClick={() => setLiveTranscript([])}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-600 hover:border-slate-400"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="bg-slate-950 rounded-lg p-4 h-48 overflow-y-auto font-mono text-sm text-green-400 leading-relaxed">
+              {liveTranscript.length === 0 ? (
+                <span className="text-slate-600 italic">Waiting for speech...</span>
+              ) : (
+                <>
+                  {liveTranscript.map((text, i) => (
+                    <span key={i}>{text} </span>
+                  ))}
+                  <div ref={transcriptEndRef} />
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Inject Claim Form */}
