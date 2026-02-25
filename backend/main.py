@@ -255,9 +255,11 @@ async def analyze_claim(claim_id: str):
     })
 
     result = await fact_check_with_perplexity(claim["statement"])
+    print(f"[FactCheck] Claim '{claim['statement'][:60]}...' → status={result['status']}")
 
     # Drop inconclusive claims (pending/error) — remove from state entirely
     if result["status"] not in ("true", "yellow", "false"):
+        print(f"[FactCheck] Dropping inconclusive claim {claim_id}: status={result['status']}")
         state.claims = [c for c in state.claims if c["id"] != claim_id]
         await broadcast({"type": "claim_removed", "claim_id": claim_id})
         return
@@ -375,8 +377,8 @@ def _fallback_classify(statement: str) -> Dict:
             "research": None,
         }
     return {
-        "status": "pending",
-        "explanation": "Perplexity API key not configured — unable to fact-check.",
+        "status": "yellow",
+        "explanation": "Unable to fully verify — Perplexity API key not configured.",
         "neutral_rephrase": None,
         "sources": [],
         "research": None,
@@ -386,6 +388,14 @@ def _fallback_classify(statement: str) -> Dict:
 @app.get("/api/stats")
 async def get_stats():
     return state.stats
+
+@app.get("/api/debug/config")
+async def debug_config(token_data: dict = Depends(require_auth)):
+    return {
+        "perplexity_key_set": bool(PERPLEXITY_API_KEY),
+        "perplexity_key_prefix": PERPLEXITY_API_KEY[:8] + "..." if PERPLEXITY_API_KEY else None,
+        "deepgram_key_set": bool(os.getenv("DEEPGRAM_API_KEY")),
+    }
 
 @app.get("/api/claims")
 async def get_claims():
