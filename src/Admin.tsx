@@ -409,6 +409,12 @@ export default function AdminPanel() {
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Show error from last failed run */}
+              {transcriptionStatus.error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-mono">
+                  Last error: {transcriptionStatus.error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">YouTube URL</label>
                 <input

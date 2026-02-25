@@ -120,6 +120,18 @@ class TranscriptionManager:
         self._task = asyncio.create_task(self._run(youtube_url))
 
     async def stop(self) -> None:
+        """User-initiated stop — clean up and reset all state."""
+        await self._cleanup()
+        self.youtube_url = None
+        self.started_at = None
+        self.metadata = None
+        self._chunks_received = 0
+        self._bytes_received = 0
+        self._last_chunk_at = 0
+        self._error = None
+
+    async def _cleanup(self) -> None:
+        """Tear down subprocesses and connections without resetting status."""
         self._running = False
 
         if self._process and self._process.poll() is None:
@@ -144,14 +156,6 @@ class TranscriptionManager:
             except asyncio.CancelledError:
                 pass
             self._task = None
-
-        self.youtube_url = None
-        self.started_at = None
-        self.metadata = None
-        self._chunks_received = 0
-        self._bytes_received = 0
-        self._last_chunk_at = 0
-        self._error = None
 
     async def _run(self, youtube_url: str) -> None:
         loop = asyncio.get_event_loop()
@@ -196,8 +200,8 @@ class TranscriptionManager:
             )
 
             if not await self._dg_connection.start(options):
-                print("[Deepgram] Failed to start connection")
-                self._running = False
+                self._error = "Deepgram connection failed — check API key"
+                print(f"[Deepgram] {self._error}")
                 return
 
             # Spawn yt-dlp | ffmpeg subprocess for audio extraction
@@ -257,8 +261,7 @@ class TranscriptionManager:
             print(f"[Transcription] Error: {e}")
             self._error = str(e)[:200]
         finally:
-            self._running = False
-            await self.stop()
+            await self._cleanup()
 
     def _is_potential_claim(self, text: str) -> bool:
         """Heuristic: does this sentence look like a checkable factual claim?"""
