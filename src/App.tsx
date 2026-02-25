@@ -83,10 +83,13 @@ function MainApp() {
           ))
           break
         case 'claim_complete':
-          setClaims(prev => prev.map(c => 
+          setClaims(prev => prev.map(c =>
             c.id === data.claim.id ? data.claim : c
           ))
           setStats(data.stats)
+          break
+        case 'claim_removed':
+          setClaims(prev => prev.filter(c => c.id !== data.claim_id))
           break
         case 'transcript':
           setLiveTranscript(data.text)

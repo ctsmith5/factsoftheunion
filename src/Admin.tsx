@@ -123,6 +123,8 @@ export default function AdminPanel() {
         setClaims(prev => [data.claim, ...prev])
       } else if (data.type === 'claim_complete') {
         setClaims(prev => prev.map(c => c.id === data.claim.id ? data.claim : c))
+      } else if (data.type === 'claim_removed') {
+        setClaims(prev => prev.filter(c => c.id !== data.claim_id))
       } else if (data.type === 'transcript') {
         setLiveTranscript(prev => {
           const next = [...prev, data.text]

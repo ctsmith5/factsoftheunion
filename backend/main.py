@@ -255,6 +255,13 @@ async def analyze_claim(claim_id: str):
     })
 
     result = await fact_check_with_perplexity(claim["statement"])
+
+    # Drop inconclusive claims (pending/error) — remove from state entirely
+    if result["status"] not in ("true", "yellow", "false"):
+        state.claims = [c for c in state.claims if c["id"] != claim_id]
+        await broadcast({"type": "claim_removed", "claim_id": claim_id})
+        return
+
     claim.update(result)
 
     if result["status"] == "true":
