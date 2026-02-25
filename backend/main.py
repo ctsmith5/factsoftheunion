@@ -80,7 +80,7 @@ async def github_login():
     if not GITHUB_CLIENT_ID:
         raise HTTPException(status_code=500, detail="GitHub OAuth not configured")
     
-    redirect_uri = f"{os.getenv('APP_URL', 'http://localhost:8000')}/api/auth/github/callback"
+    redirect_uri = f"{os.getenv('APP_URL', 'https://factsoftheunion.com')}/api/auth/github/callback"
     github_url = (
         f"https://github.com/login/oauth/authorize?"
         f"client_id={GITHUB_CLIENT_ID}&"

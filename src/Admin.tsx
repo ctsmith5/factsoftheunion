@@ -19,7 +19,7 @@ interface User {
 }
 
 const CATEGORIES = ['economy', 'healthcare', 'immigration', 'foreign-policy', 'climate', 'other']
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || (window.location.origin)
 
 export default function AdminPanel() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -85,7 +85,8 @@ export default function AdminPanel() {
   useEffect(() => {
     if (!user) return
 
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws`
     const ws = new WebSocket(wsUrl)
     
     ws.onopen = () => setIsConnected(true)
@@ -119,7 +120,8 @@ export default function AdminPanel() {
     e.preventDefault()
     const token = localStorage.getItem('admin_token')
     
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws`
     const ws = new WebSocket(wsUrl)
     
     ws.onopen = () => {
