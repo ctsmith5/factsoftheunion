@@ -264,7 +264,7 @@ function MainApp() {
                             )}
                           </div>
 
-                          {claim.sources.length > 0 && (
+                          {claim.sources?.length > 0 && (
                             <div className="flex flex-wrap gap-2 items-center">
                               <span className="text-sm text-slate-500">📚 Sources:</span>
                               {claim.sources.map((source, idx) => (
