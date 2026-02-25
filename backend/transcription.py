@@ -205,8 +205,10 @@ class TranscriptionManager:
                 return
 
             # Spawn yt-dlp | ffmpeg subprocess for audio extraction
+            # Note: yt-dlp stderr goes to the shell pipe's stderr (captured below),
+            # only stdout (audio) goes to ffmpeg
             cmd = (
-                f"yt-dlp -f bestaudio -o - '{youtube_url}' 2>&1 | "
+                f"yt-dlp -f bestaudio -o - '{youtube_url}' | "
                 f"ffmpeg -i pipe:0 -f s16le -ar 16000 -ac 1 pipe:1"
             )
             self._process = await loop.run_in_executor(
