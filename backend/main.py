@@ -19,6 +19,7 @@ from transcription import TranscriptionManager
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -242,61 +243,137 @@ async def broadcast(message: Dict):
             state.clients.remove(client)
 
 async def analyze_claim(claim_id: str):
-    """LangGraph-style analysis pipeline"""
+    """Fact-check a claim using Perplexity's search-augmented LLM."""
     claim = next((c for c in state.claims if c["id"] == claim_id), None)
     if not claim:
         return
-    
-    await asyncio.sleep(0.5)
+
     await broadcast({
         "type": "claim_update",
         "claim_id": claim_id,
         "update": {"stage": "researching"}
     })
-    
-    await asyncio.sleep(1.5)
-    
-    result = classify_claim(claim["statement"])
+
+    result = await fact_check_with_perplexity(claim["statement"])
     claim.update(result)
-    
+
     if result["status"] == "true":
         state.stats["correct"] += 1
     elif result["status"] == "yellow":
         state.stats["clarified"] += 1
     elif result["status"] == "false":
         state.stats["falsehoods"] += 1
-    
+
     await broadcast({
         "type": "claim_complete",
         "claim": claim,
         "stats": state.stats
     })
 
-def classify_claim(statement: str) -> Dict:
-    """Yellow Zone classification logic"""
-    statement_lower = statement.lower()
-    
-    if any(word in statement_lower for word in ["best", "greatest", "huge", "tremendous", "ever"]):
+
+async def fact_check_with_perplexity(statement: str) -> Dict:
+    """Call Perplexity API to research and verdict a claim."""
+    if not PERPLEXITY_API_KEY:
+        print("[FactCheck] PERPLEXITY_API_KEY not set, using fallback")
+        return _fallback_classify(statement)
+
+    prompt = (
+        "You are a nonpartisan political fact-checker. A politician just said:\n\n"
+        f'"{statement}"\n\n'
+        "Research this claim using current data and sources. Then respond in EXACTLY this JSON format, nothing else:\n"
+        "{\n"
+        '  "verdict": "true" | "mostly_true" | "misleading" | "false",\n'
+        '  "explanation": "2-3 sentence analysis with specific data points",\n'
+        '  "neutral_rephrase": "A neutral, factually accurate way to state this",\n'
+        '  "sources": ["source name 1", "source name 2"],\n'
+        '  "category": "economy" | "healthcare" | "immigration" | "foreign-policy" | "climate" | "other"\n'
+        "}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "sonar",
+                    "messages": [
+                        {"role": "system", "content": "You are a fact-checking assistant. Always respond with valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        raw_content = data["choices"][0]["message"]["content"]
+        citations = data.get("citations", [])
+        print(f"[FactCheck] Perplexity response: {raw_content[:300]}")
+
+        # Parse the JSON from the response (strip markdown fences if present)
+        json_str = raw_content.strip()
+        if json_str.startswith("```"):
+            json_str = json_str.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(json_str)
+
+        # Map verdict to our status system
+        verdict = parsed.get("verdict", "").lower()
+        verdict_map = {
+            "true": "true",
+            "mostly_true": "yellow",
+            "misleading": "yellow",
+            "false": "false",
+        }
+        status = verdict_map.get(verdict, "yellow")
+
+        # Build citation source list — use parsed source names + Perplexity URLs
+        source_names = parsed.get("sources", [])
+        source_list = source_names[:5]
+        if citations:
+            for url in citations[:3]:
+                source_list.append(url)
+
+        return {
+            "status": status,
+            "explanation": parsed.get("explanation", raw_content[:300]),
+            "neutral_rephrase": parsed.get("neutral_rephrase"),
+            "sources": source_list,
+            "category": parsed.get("category", "other"),
+            "research": raw_content,
+        }
+
+    except Exception as e:
+        print(f"[FactCheck] Perplexity API error: {e}")
         return {
             "status": "yellow",
-            "explanation": "This is a stylistic exaggeration of measurable improvements.",
-            "neutral_rephrase": "Significant progress has been made in this area.",
-            "sources": ["Bureau of Labor Statistics", "Census Bureau"]
-        }
-    elif any(word in statement_lower for word in ["9%", "15 million", "created", "inflation"]):
-        return {
-            "status": "true",
-            "explanation": "Statistics are verified by official government data.",
-            "neutral_rephrase": statement,
-            "sources": ["Bureau of Labor Statistics"]
-        }
-    else:
-        return {
-            "status": "pending",
-            "explanation": "Analysis in progress...",
+            "explanation": f"Fact-check unavailable: {str(e)[:100]}",
             "neutral_rephrase": None,
-            "sources": []
+            "sources": [],
+            "research": None,
         }
+
+
+def _fallback_classify(statement: str) -> Dict:
+    """Simple keyword fallback when Perplexity is not configured."""
+    statement_lower = statement.lower()
+    if any(w in statement_lower for w in ["best", "greatest", "huge", "tremendous", "ever"]):
+        return {
+            "status": "yellow",
+            "explanation": "Contains superlative language that may exaggerate measurable facts. (Perplexity API key not configured for full analysis.)",
+            "neutral_rephrase": None,
+            "sources": [],
+            "research": None,
+        }
+    return {
+        "status": "pending",
+        "explanation": "Perplexity API key not configured — unable to fact-check.",
+        "neutral_rephrase": None,
+        "sources": [],
+        "research": None,
+    }
 
 # Protected API endpoints
 @app.get("/api/stats")

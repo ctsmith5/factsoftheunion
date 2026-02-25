@@ -15,6 +15,7 @@ interface Claim {
   neutral_rephrase?: string
   sources: string[]
   stage?: string
+  research?: string
 }
 
 const STATUS_COLORS = {
@@ -265,11 +266,29 @@ function MainApp() {
                             <div className="flex flex-wrap gap-2 items-center">
                               <span className="text-sm text-slate-500">📚 Sources:</span>
                               {claim.sources.map((source, idx) => (
-                                <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">
-                                  {source}
-                                </span>
+                                source.startsWith('http') ? (
+                                  <a key={idx} href={source} target="_blank" rel="noopener noreferrer"
+                                    className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded truncate max-w-[200px]">
+                                    {new URL(source).hostname.replace('www.', '')}
+                                  </a>
+                                ) : (
+                                  <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                                    {source}
+                                  </span>
+                                )
                               ))}
                             </div>
+                          )}
+
+                          {claim.research && (
+                            <details className="mt-3">
+                              <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600">
+                                View Perplexity research
+                              </summary>
+                              <pre className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">
+                                {claim.research}
+                              </pre>
+                            </details>
                           )}
                         </>
                       )}
