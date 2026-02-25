@@ -114,6 +114,9 @@ class TranscriptionManager:
                     "is_live": raw.get("is_live", False),
                     "thumbnail": raw.get("thumbnail"),
                 }
+                print(f"[Transcription] Metadata OK: {self.metadata.get('title')} (live={self.metadata.get('is_live')})")
+            else:
+                print(f"[Transcription] yt-dlp metadata failed (rc={meta_result.returncode}): {meta_result.stderr[:500] if meta_result.stderr else 'no output'}")
         except Exception as e:
             print(f"[Transcription] Failed to fetch metadata: {e}")
 
@@ -162,6 +165,7 @@ class TranscriptionManager:
 
         try:
             # Set up Deepgram live transcription
+            print(f"[Transcription] Connecting to Deepgram (key={'set' if DEEPGRAM_API_KEY else 'MISSING'})...")
             dg_client = DeepgramClient(DEEPGRAM_API_KEY)
             self._dg_connection = dg_client.listen.asyncwebsocket.v("1")
 
@@ -199,18 +203,21 @@ class TranscriptionManager:
                 channels=1,
             )
 
-            if not await self._dg_connection.start(options):
+            started = await self._dg_connection.start(options)
+            print(f"[Transcription] Deepgram connection started: {started}")
+            if not started:
                 self._error = "Deepgram connection failed — check API key"
                 print(f"[Deepgram] {self._error}")
                 return
 
             # Spawn yt-dlp | ffmpeg subprocess for audio extraction
-            # Note: yt-dlp stderr goes to the shell pipe's stderr (captured below),
-            # only stdout (audio) goes to ffmpeg
+            # Use "bestaudio/worst" so live HLS streams (no audio-only format)
+            # fall back to the lowest combined stream. ffmpeg extracts audio.
             cmd = (
-                f"yt-dlp -f bestaudio -o - '{youtube_url}' | "
-                f"ffmpeg -i pipe:0 -f s16le -ar 16000 -ac 1 pipe:1"
+                f"yt-dlp -f 'bestaudio/worst' --no-warnings -o - '{youtube_url}' | "
+                f"ffmpeg -nostdin -loglevel error -i pipe:0 -vn -f s16le -ar 16000 -ac 1 pipe:1"
             )
+            print(f"[Transcription] Spawning audio pipeline: {cmd}")
             self._process = await loop.run_in_executor(
                 None,
                 lambda: subprocess.Popen(
@@ -220,6 +227,7 @@ class TranscriptionManager:
                     stderr=subprocess.PIPE,
                 ),
             )
+            print(f"[Transcription] Audio process PID: {self._process.pid}")
 
             # Read stderr in background to capture errors
             async def _read_stderr():
@@ -247,6 +255,7 @@ class TranscriptionManager:
                     None, self._process.stdout.read, chunk_size
                 )
                 if not data:
+                    print(f"[Transcription] Audio stream ended (chunks={self._chunks_received}, bytes={self._bytes_received})")
                     if self._chunks_received == 0 and not self._error:
                         self._error = "yt-dlp produced no audio data — video may be unavailable or URL invalid"
                     break
