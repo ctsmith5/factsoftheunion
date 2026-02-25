@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Set
 from datetime import datetime, timedelta
 import os
 import pathlib
+import uuid
 import httpx
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -176,7 +177,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             elif message.get("type") == "claim":
                 claim = {
-                    "id": f"claim_{len(state.claims)}",
+                    "id": f"claim_{uuid.uuid4().hex[:8]}",
                     "timestamp": datetime.now().isoformat(),
                     "statement": message.get("statement"),
                     "speaker": message.get("speaker", "President"),
@@ -283,7 +284,7 @@ async def test_claim(
 ):
     """Protected: Test endpoint for manual claim injection"""
     claim = {
-        "id": f"claim_{len(state.claims)}",
+        "id": f"claim_{uuid.uuid4().hex[:8]}",
         "timestamp": datetime.now().isoformat(),
         "statement": statement,
         "speaker": speaker,

@@ -7,4 +7,13 @@ export default defineConfig({
   css: {
     postcss: './postcss.config.js',
   },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8000',
+      '/ws': {
+        target: 'ws://localhost:8000',
+        ws: true,
+      },
+    },
+  },
 })

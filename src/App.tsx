@@ -70,7 +70,7 @@ function MainApp() {
       
       switch (data.type) {
         case 'init':
-          setClaims(data.claims)
+          setClaims(data.data || [])
           setStats(data.stats)
           break
         case 'new_claim':
@@ -126,36 +126,33 @@ function MainApp() {
 
           {/* Scoreboard */}
           <div className="grid grid-cols-3 gap-4 mt-4">
-            <motion.div 
-              className="bg-white/10 backdrop-blur rounded-lg p-3 text-center"
-              key={stats.correct}
-              initial={{ scale: 1 }}
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.3 }}
-            >
-              <p className="text-2xl font-bold text-green-400">{stats.correct}</p>
+            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <motion.p
+                key={stats.correct}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                className="text-2xl font-bold text-green-400"
+              >{stats.correct}</motion.p>
               <p className="text-sm text-blue-100">✅ Correct</p>
-            </motion.div>
-            <motion.div 
-              className="bg-white/10 backdrop-blur rounded-lg p-3 text-center"
-              key={stats.clarified}
-              initial={{ scale: 1 }}
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.3 }}
-            >
-              <p className="text-2xl font-bold text-yellow-400">{stats.clarified}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <motion.p
+                key={stats.clarified}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                className="text-2xl font-bold text-yellow-400"
+              >{stats.clarified}</motion.p>
               <p className="text-sm text-blue-100">⚠️ Clarified</p>
-            </motion.div>
-            <motion.div 
-              className="bg-white/10 backdrop-blur rounded-lg p-3 text-center"
-              key={stats.falsehoods}
-              initial={{ scale: 1 }}
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.3 }}
-            >
-              <p className="text-2xl font-bold text-red-400">{stats.falsehoods}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <motion.p
+                key={stats.falsehoods}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                className="text-2xl font-bold text-red-400"
+              >{stats.falsehoods}</motion.p>
               <p className="text-sm text-blue-100">❌ False</p>
-            </motion.div>
+            </div>
           </div>
         </div>
       </header>
@@ -318,19 +315,6 @@ function MainApp() {
         </AnimatePresence>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-8 mt-12">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="mb-2 font-medium">Facts of the Union • The Yellow Zone System</p>
-          <p className="text-sm max-w-2xl mx-auto">
-            We don't just fact-check — we translate. The Yellow Zone identifies stylistic exaggerations 
-            and provides neutral rephrases that any American can accept.
-          </p>
-          <p className="text-xs mt-4 text-slate-500">
-            Powered by LangGraph, Perplexity AI, and Deepgram • 2025
-          </p>
-        </div>
-      </footer>
     </div>
   )
 }
